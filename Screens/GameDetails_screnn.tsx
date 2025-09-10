@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -12,10 +12,13 @@ import {
     SafeAreaView,
     StatusBar,
     Pressable,
+    Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { getGameDetails, getGameScreenshots } from "../API/api_rawg";
 import { LayoutAnimation, Platform, UIManager } from "react-native";
+import { Modal, Button } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 
 import PCIcon from "../assets/Plataforms_icons/windows.svg";
 import IOSicon from "../assets/Plataforms_icons/apple.svg";
@@ -23,7 +26,9 @@ import XboxIcon from "../assets/Plataforms_icons/xbox.svg";
 import PSIcon from "../assets/Plataforms_icons/playstation.svg";
 import Androidicon from "../assets/Plataforms_icons/android.svg";
 import NitendoIcon from "../assets/Plataforms_icons/nintendo.svg";
-
+import { AnimatedActionButton } from "../Components/Game_Page/AnimatedActionButton";
+import Toast from "react-native-toast-message";
+import { Snackbar } from "react-native-paper";
 const { width, height } = Dimensions.get("window");
 
 const platformIcons: { [key: string]: any } = {
@@ -44,7 +49,14 @@ export default function GameDetailsScreen({ route, navigation }: any) {
     const [screenshots, setScreenshots] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showFullDescription, setShowFullDescription] = useState(false);
-
+    const [isWishlist, setIsWishlist] = useState(false);
+    const [isCompleted, setIsCompleted] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [snackbarVisible, setSnackbarVisible] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState("");
+    const [hoursModalVisible, setHoursModalVisible] = useState(false);
+    const [selectedHours, setSelectedHours] = useState(0);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         async function fetchDetails() {
             const data = await getGameDetails(game.id);
@@ -57,6 +69,21 @@ export default function GameDetailsScreen({ route, navigation }: any) {
         }
         fetchDetails();
     }, [game.id]);
+    useEffect(() => {
+        if (hoursModalVisible) {
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        } else {
+            Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+        }
+    }, [hoursModalVisible]);
 
     if (loading) {
         return (
@@ -76,10 +103,14 @@ export default function GameDetailsScreen({ route, navigation }: any) {
         );
     }
 
+    const showMessage = (msg: string) => {
+        setSnackbarMessage(msg);
+        setSnackbarVisible(true);
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
-            {/* Botão de voltar */}
             <TouchableOpacity
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
@@ -88,7 +119,6 @@ export default function GameDetailsScreen({ route, navigation }: any) {
             </TouchableOpacity>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Banner */}
                 <Image
                     source={
                         details.background_image
@@ -98,17 +128,59 @@ export default function GameDetailsScreen({ route, navigation }: any) {
                     style={styles.image}
                 />
 
-                {/* Nome + Rating */}
                 <Text style={styles.title}>{details.name}</Text>
-                <Text style={styles.rating}>⭐ {details.rating.toFixed(1)}</Text>
+                <View style={styles.ratingRow}>
+                    <Text style={styles.rating}>⭐ {details.rating.toFixed(1)}</Text>
 
-                {/* Data de lançamento */}
+                    <View style={styles.actionsRow}>
+                        <AnimatedActionButton
+                            iconName={isWishlist ? "heart" : "heart-outline"}
+                            color="#ff0062ff"
+                            size={width * 0.075}
+                            onPress={() => {
+                                const newValue = !isWishlist;
+                                setIsWishlist(newValue);
+                                if (newValue) showMessage("Added to Wishlist");
+                            }}
+                        />
+
+                        <AnimatedActionButton
+                            iconName={isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
+                            color="#4CAF50"
+                            size={width * 0.075}
+                            onPress={() => {
+                                const newValue = !isCompleted;
+                                setIsCompleted(newValue);
+                                if (newValue) {
+                                    setHoursModalVisible(true);
+                                }
+                            }}
+                        />
+
+
+                        <AnimatedActionButton
+                            iconName={isPlaying ? "game-controller" : "game-controller-outline"}
+                            color="#FFD700"
+                            size={width * 0.075}
+                            onPress={() => {
+                                const newValue = !isPlaying;
+                                setIsPlaying(newValue);
+                                if (newValue) showMessage("Added to Playing");
+                            }}
+                        />
+
+
+
+                    </View>
+                </View>
+
+
+
                 <Text style={styles.subTitle}>🚀 Realese Date</Text>
                 <Text style={styles.release}>
                     {details.released || "N/A"}
                 </Text>
 
-                {/* Plataformas */}
                 <Text style={styles.subTitle}>⚙️ Platforms</Text>
                 <View style={styles.platformRow}>
                     <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: 15 }}>
@@ -129,18 +201,16 @@ export default function GameDetailsScreen({ route, navigation }: any) {
 
                 </View>
                 <Text style={styles.subTitle}>ℹ️ Description</Text>
-                {/* Descrição */}
                 <View style={{ marginBottom: 20, alignItems: "center" }}>
                     <Text
                         style={styles.description}
-                        numberOfLines={showFullDescription ? undefined : 10} // limita a 10 linhas
+                        numberOfLines={showFullDescription ? undefined : 10}
                     >
                         {details.description_raw
                             ? details.description_raw
                             : "No description available for this game."}
                     </Text>
 
-                    {/* Botão Show More */}
                     {details.description_raw && details.description_raw.length > 400 && (
                         <Pressable
                             onPress={() => {
@@ -149,7 +219,7 @@ export default function GameDetailsScreen({ route, navigation }: any) {
                             }}
                             style={({ pressed }) => [
                                 { marginTop: 5 },
-                                pressed && { opacity: 0.7 }, // efeito visual ao pressionar
+                                pressed && { opacity: 0.7 },
                             ]}
                         >
                             <Text style={styles.showMore}>
@@ -162,7 +232,6 @@ export default function GameDetailsScreen({ route, navigation }: any) {
                 </View>
 
 
-                {/* Galeria */}
                 <Text style={styles.subTitle}>📸 Screenshots</Text>
                 <FlatList
                     data={screenshots}
@@ -179,15 +248,70 @@ export default function GameDetailsScreen({ route, navigation }: any) {
                     contentContainerStyle={{ paddingVertical: 10 }}
                 />
 
-                {/* Géneros */}
                 <Text style={styles.subTitle}>🎮 Genres</Text>
-                <Text style={styles.genres}>
-                    {details.genres?.map((g: any) => g.name).join(", ")}
-                </Text>
-    <details.dew></details>CRIAR BASE DE DADOS COM TABELA generos
-            </ScrollView>
+                <View style={styles.genreRow}>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: 15 }}>
+                        {details.genres?.map((g: any, idx: number) => {
+                            return (
+                                <View
+                                    key={idx}
+                                    style={styles.platformBadge}
+                                >
+                                    <Text style={styles.platformText}>{g.name}</Text>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
 
-        </SafeAreaView>
+            </ScrollView>
+            <Snackbar
+                visible={snackbarVisible}
+                onDismiss={() => setSnackbarVisible(false)}
+                duration={2000}
+                style={{ backgroundColor: '#240a24ff', borderRadius: 10, margin: 16 }}
+                wrapperStyle={{ bottom: 0 }}
+                theme={{ colors: { surface: '#3b113cff' } }}
+            >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons
+                        name="checkmark-circle"
+                        size={23}
+                        color="#FD44FF"
+                        style={{ marginRight: 8 }}
+                    />
+                    <Text style={{ color: '#FD44FF', fontWeight: 'bold' }}>{snackbarMessage}</Text>
+                </View>
+            </Snackbar>
+            {hoursModalVisible && (
+                <Modal transparent visible={hoursModalVisible} onRequestClose={() => setHoursModalVisible(false)}>
+                    <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Enter Hours Played</Text>
+                            <Picker
+                                selectedValue={selectedHours}
+                                onValueChange={(itemValue) => setSelectedHours(itemValue)}
+                            >
+                                {Array.from({ length: 101 }, (_, i) => i).map((h) => (
+                                    <Picker.Item key={h} label={`${h} h`} value={h} />
+                                ))}
+                            </Picker>
+
+                            <Button
+                                title="Confirmar"
+                                onPress={() => {
+                                    setHoursModalVisible(false);
+                                    showMessage(`Added to Completed`);
+                                }}
+                            />
+                        </View>
+                    </Animated.View>
+                </Modal>
+            )}
+
+
+
+        </SafeAreaView >
     );
 }
 
@@ -225,18 +349,13 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         color: "#FD44FF",
         marginHorizontal: width * 0.04,
-        marginBottom: height * 0.005,
+
     },
-    rating: {
-        fontSize: width * 0.045,
-        color: "#FFD700",
-        marginHorizontal: width * 0.04,
-        marginBottom: height * 0.015,
-    },
+
     release: {
         fontSize: width * 0.04,
         color: "#ffffffff",
-        marginHorizontal: width * 0.04,
+        marginHorizontal: width * 0.08,
         marginBottom: height * 0.02,
         fontWeight: '500'
     },
@@ -251,7 +370,7 @@ const styles = StyleSheet.create({
         fontSize: width * 0.04,
         color: "#ddd",
         lineHeight: width * 0.05,
-        marginHorizontal: width * 0.04,
+        marginHorizontal: width * 0.08,
         fontWeight: '500',
     },
     subTitle: {
@@ -265,12 +384,12 @@ const styles = StyleSheet.create({
         width: width * 0.7,
         height: height * 0.25,
         borderRadius: width * 0.03,
-        marginHorizontal: width * 0.025,
+        marginHorizontal: width * 0.04,
     },
     genres: {
         fontSize: width * 0.04,
         color: "#fff",
-        marginHorizontal: width * 0.04,
+        marginHorizontal: width * 0.08,
         marginBottom: height * 0.03,
     },
     showMore: {
@@ -294,4 +413,50 @@ const styles = StyleSheet.create({
         fontSize: width * 0.035,
         fontWeight: "bold",
     },
+    genreRow: {
+        marginVertical: 10,
+        marginHorizontal: width * 0.04,
+    },
+    ratingRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginHorizontal: width * 0.04,
+        marginVertical: height * 0.015,
+    },
+    rating: {
+        fontSize: width * 0.045,
+        color: "#FFD700",
+        marginHorizontal: width * 0.04,
+        marginBottom: height * 0.0015,
+    },
+    actionsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+
+    },
+    actionIcon: {
+        marginLeft: width * 0.03,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    modalContent: {
+        width: "80%",
+        backgroundColor: "#050713",
+        padding: 20,
+        borderRadius: 10,
+    },
+    modalTitle: {
+        fontWeight: "bold",
+        color: "#FD44FF",
+        fontSize: 18,
+        alignSelf: 'center',
+        marginBottom: 10,
+    },
+
 });
